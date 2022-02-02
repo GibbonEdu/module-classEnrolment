@@ -1,0 +1,7 @@
+CHANGELOG
+=========
+v1.0.00
+-------
+Initial feature set (complete):
+    - Manage Settings
+    - Enrolment_myChildren
