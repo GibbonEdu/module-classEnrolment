@@ -29,7 +29,7 @@ if (isActionAccessible($guid, $connection2, '/modules/Class Enrolment/enrolment.
     $page->addError(__('You do not have access to this action.'));
 } else {
     //Proceed!
-    $page->breadcrumbs->add(__('Enrolment'));
+    $page->breadcrumbs->add(__m('Enrolment'));
 
     $settingGateway = $container->get(SettingGateway::class);
 
@@ -58,10 +58,11 @@ if (isActionAccessible($guid, $connection2, '/modules/Class Enrolment/enrolment.
 		$form = Form::create('selectFamily', $session->get('absoluteURL').'/index.php', 'get');
 		$form->addHiddenValue('q', '/modules/'.$session->get('module').'/enrolment.php');
 
-        $form->setTitle(__('Select Child'));
+        $form->setTitle(__m('Select Student'));
 
         $children = $container->get(StudentGateway::class)->selectActiveStudentsByFamilyAdult($session->get('gibbonSchoolYearID'), $session->get('gibbonPersonID'))->fetchAll();
         $children = Format::nameListArray($children, 'Student', false, true);
+        //$children[$session->get('gibbonPersonID')] = Format::name('', $session->get('surname'), $session->get('preferredName'), 'Student', false, true);
 
         if (count($children) == 1) {
             $gibbonPersonID = array_key_first($children);
@@ -105,7 +106,7 @@ if (isActionAccessible($guid, $connection2, '/modules/Class Enrolment/enrolment.
                 else {
                     // FORM
                     $form = Form::create('settings', $gibbon->session->get('absoluteURL').'/modules/Class Enrolment/enrolmentProcess.php');
-                    $form->setTitle(__('Add Enrolment'));
+                    $form->setTitle(__m('Add Enrolment'));
 
                     $form->addHiddenValue('address', $gibbon->session->get('address'));
                     $form->addHiddenValue('gibbonPersonID', $gibbonPersonID);
@@ -116,8 +117,8 @@ if (isActionAccessible($guid, $connection2, '/modules/Class Enrolment/enrolment.
                     $enrolableClasses = $courseEnrolmentGateway->selectEnrolableClassesByYearGroup($session->get('gibbonSchoolYearID'), $student['gibbonYearGroupID'])->fetchAll();
 
                     if (!empty($enrolableClasses)) {
-                        $classes['--'.__('Enrolable Classes').'--'] = Format::keyValue($enrolableClasses, 'gibbonCourseClassID', function ($item) {
-                            $courseClassName = Format::courseClassName($item['course'], $item['class']);
+                        $classes['--'.__m('Enrolable Classes').'--'] = Format::keyValue($enrolableClasses, 'gibbonCourseClassID', function ($item) {
+                            $courseClassName = $item['courseName']." (Class ".$item['class'].")";
                             $teacherName = Format::name('', $item['preferredName'], $item['surname'], 'Staff');
 
                             return $courseClassName .' - '. (!empty($teacherName)? $teacherName : '');
@@ -145,7 +146,7 @@ if (isActionAccessible($guid, $connection2, '/modules/Class Enrolment/enrolment.
 
                     // Data Table
                     $table = DataTable::create('activities');
-                    $table->setTitle(__('Current Enrolment'));
+                    $table->setTitle(__m('Current Enrolment'));
 
                     $table->addColumn('courseClass', __('Class Code'))
                           ->sortable(['course', 'class'])

@@ -1,5 +1,11 @@
 CHANGELOG
 =========
+v1.0.01
+-------
+Added English (US) translation
+Title changed from Select Child to Select Student
+Changed to full course name in the Classes select
+
 v1.0.00
 -------
 Initial feature set (complete):
