@@ -40,6 +40,9 @@ if (isActionAccessible($guid, $connection2, '/modules/Class Enrolment/enrolment_
                 $checkCount = true;
             }
         }
+        if ($session->get('gibbonPersonID') == $gibbonPersonID) {
+            $checkCount = true;
+        }
 
         if (!$checkCount) {
             $page->addError(__('The selected record does not exist, or you do not have access to it.'));

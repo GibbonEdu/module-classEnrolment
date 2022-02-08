@@ -23,7 +23,7 @@ $description = "A simple module for allowing parents to enrol their children in 
 $entryURL = "enrolment.php";
 $type = "Additional";
 $category = "Learn";
-$version = "1.0.01";
+$version = "1.0.02";
 $author = "Ross Parker";
 $url = "http://rossparker.org";
 

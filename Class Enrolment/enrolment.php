@@ -62,7 +62,7 @@ if (isActionAccessible($guid, $connection2, '/modules/Class Enrolment/enrolment.
 
         $children = $container->get(StudentGateway::class)->selectActiveStudentsByFamilyAdult($session->get('gibbonSchoolYearID'), $session->get('gibbonPersonID'))->fetchAll();
         $children = Format::nameListArray($children, 'Student', false, true);
-        //$children[$session->get('gibbonPersonID')] = Format::name('', $session->get('surname'), $session->get('preferredName'), 'Student', false, true);
+        $children[$session->get('gibbonPersonID')] = Format::name('', $session->get('preferredName'), $session->get('surname'), 'Student', false, true);
 
         if (count($children) == 1) {
             $gibbonPersonID = array_key_first($children);
@@ -89,6 +89,9 @@ if (isActionAccessible($guid, $connection2, '/modules/Class Enrolment/enrolment.
                 if ($student['gibbonPersonID'] == $gibbonPersonID) {
                     $checkCount = true;
                 }
+            }
+            if ($session->get('gibbonPersonID') == $gibbonPersonID) {
+                $checkCount = true;
             }
 
             if (!$checkCount) {

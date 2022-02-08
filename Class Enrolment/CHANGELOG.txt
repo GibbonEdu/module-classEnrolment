@@ -1,5 +1,9 @@
 CHANGELOG
 =========
+v1.0.02
+-------
+Added ability for parents who are also students to self-enrol into classes
+
 v1.0.01
 -------
 Added English (US) translation

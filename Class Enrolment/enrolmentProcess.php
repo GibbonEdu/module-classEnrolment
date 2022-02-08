@@ -43,9 +43,13 @@ if ($gibbonPersonID == '' or count($gibbonCourseClassIDs) < 1) {
                 $checkCount = true;
             }
         }
+        if ($session->get('gibbonPersonID') == $gibbonPersonID) {
+            $checkCount = true;
+        }
 
         if (!$checkCount) {
             $URL .= '&return=error0';
+            header("Location: {$URL}");
         } else {
             $partialFail = false;
 

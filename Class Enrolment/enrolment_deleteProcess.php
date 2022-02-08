@@ -44,9 +44,13 @@ if ($gibbonPersonID == '' or $gibbonCourseClassID == '') {
                 $checkCount = true;
             }
         }
+        if ($session->get('gibbonPersonID') == $gibbonPersonID) {
+            $checkCount = true;
+        }
 
         if (!$checkCount) {
             $URL .= '&return=error0';
+            header("Location: {$URLDelete}");
         } else {
             $courseEnrolmentGateway = $container->get(CourseEnrolmentGateway::class);
             $courseEnrolment = $courseEnrolmentGateway->selectBy(['gibbonCourseClassID' => $gibbonCourseClassID, 'gibbonPersonID' => $gibbonPersonID])->fetch();
