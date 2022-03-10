@@ -17,6 +17,7 @@ You should have received a copy of the GNU General Public License
 along with this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
+use Gibbon\Domain\User\FamilyGateway;
 use Gibbon\Domain\Students\StudentGateway;
 use Gibbon\Domain\Timetable\CourseEnrolmentGateway;
 
@@ -34,20 +35,21 @@ if ($gibbonPersonID == '' or count($gibbonCourseClassIDs) < 1) {
         $URL .= '&return=error0';
         header("Location: {$URL}");
     } else {
-        // CHECK ACCESS TO STUDENT
-        $studentGateway = $container->get(StudentGateway::class);
-        $students = $studentGateway->selectActiveStudentsByFamilyAdult($session->get('gibbonSchoolYearID'), $session->get('gibbonPersonID'))->toDataSet();
-        $checkCount = false;
-        foreach ($students as $student) {
-            if ($student['gibbonPersonID'] == $gibbonPersonID) {
-                $checkCount = true;
-            }
+        // Prepare array of family members
+        $familyGateway = $container->get(FamilyGateway::class);
+        $families = [];
+        $familyMembers = [] ;
+        $people = [];
+        foreach ($familyGateway->selectFamiliesByAdult($session->get('gibbonPersonID'))->fetchAll() as $family) {
+            $families[] = $family["gibbonFamilyID"];
         }
-        if ($session->get('gibbonPersonID') == $gibbonPersonID) {
-            $checkCount = true;
+        $familyMembers = $familyGateway->selectAdultsByFamily($families)->fetchAll();
+        $familyMembers = array_merge($familyMembers, $familyGateway->selectChildrenByFamily($families)->fetchAll());
+        foreach ($familyMembers as $member) {
+            $people[] = $member['gibbonPersonID'];
         }
 
-        if (!$checkCount) {
+        if (!in_array($gibbonPersonID, $people)) {
             $URL .= '&return=error0';
             header("Location: {$URL}");
         } else {

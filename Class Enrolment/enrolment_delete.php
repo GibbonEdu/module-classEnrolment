@@ -18,6 +18,7 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
 use Gibbon\Forms\Prefab\DeleteForm;
+use Gibbon\Domain\User\FamilyGateway;
 use Gibbon\Domain\Students\StudentGateway;
 
 if (isActionAccessible($guid, $connection2, '/modules/Class Enrolment/enrolment_delete.php') == false) {
@@ -31,20 +32,21 @@ if (isActionAccessible($guid, $connection2, '/modules/Class Enrolment/enrolment_
     if ($gibbonPersonID == '' or $gibbonCourseClassID == '') {
         $page->addError(__('You have not specified one or more required parameters.'));
     } else {
-        // CHECK ACCESS TO STUDENT
-        $studentGateway = $container->get(StudentGateway::class);
-        $students = $studentGateway->selectActiveStudentsByFamilyAdult($session->get('gibbonSchoolYearID'), $session->get('gibbonPersonID'))->toDataSet();
-        $checkCount = false;
-        foreach ($students as $student) {
-            if ($student['gibbonPersonID'] == $gibbonPersonID) {
-                $checkCount = true;
-            }
+        // Prepare array of family members
+        $familyGateway = $container->get(FamilyGateway::class);
+        $families = [];
+        $familyMembers = [] ;
+        $people = [];
+        foreach ($familyGateway->selectFamiliesByAdult($session->get('gibbonPersonID'))->fetchAll() as $family) {
+            $families[] = $family["gibbonFamilyID"];
         }
-        if ($session->get('gibbonPersonID') == $gibbonPersonID) {
-            $checkCount = true;
+        $familyMembers = $familyGateway->selectAdultsByFamily($families)->fetchAll();
+        $familyMembers = array_merge($familyMembers, $familyGateway->selectChildrenByFamily($families)->fetchAll());
+        foreach ($familyMembers as $member) {
+            $people[] = $member['gibbonPersonID'];
         }
 
-        if (!$checkCount) {
+        if (!in_array($gibbonPersonID, $people)) {
             $page->addError(__('The selected record does not exist, or you do not have access to it.'));
         }
         else {

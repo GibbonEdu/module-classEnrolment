@@ -1,5 +1,9 @@
 CHANGELOG
 =========
+v1.1.00
+-------
+Added ability to enrol all children and adults in all families in which the user is an adult with data access
+
 v1.0.02
 -------
 Added ability for parents who are also students to self-enrol into classes

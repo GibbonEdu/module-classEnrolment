@@ -20,6 +20,7 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 use Gibbon\Forms\Form;
 use Gibbon\Services\Format;
 use Gibbon\Tables\DataTable;
+use Gibbon\Domain\User\FamilyGateway;
 use Gibbon\Domain\System\SettingGateway;
 use Gibbon\Domain\Students\StudentGateway;
 use Gibbon\Domain\Timetable\CourseEnrolmentGateway;
@@ -60,18 +61,25 @@ if (isActionAccessible($guid, $connection2, '/modules/Class Enrolment/enrolment.
 
         $form->setTitle(__m('Select Student'));
 
-        $children = $container->get(StudentGateway::class)->selectActiveStudentsByFamilyAdult($session->get('gibbonSchoolYearID'), $session->get('gibbonPersonID'))->fetchAll();
-        $children = Format::nameListArray($children, 'Student', false, true);
-        $children[$session->get('gibbonPersonID')] = Format::name('', $session->get('preferredName'), $session->get('surname'), 'Student', false, true);
-
-        if (count($children) == 1) {
-            $gibbonPersonID = array_key_first($children);
+        // Prepare array of family members
+        $familyGateway = $container->get(FamilyGateway::class);
+        $families = [];
+        $familyMembers = [] ;
+        $people = [];
+        foreach ($familyGateway->selectFamiliesByAdult($session->get('gibbonPersonID'))->fetchAll() as $family) {
+            $families[] = $family["gibbonFamilyID"];
         }
+        $familyMembers = $familyGateway->selectAdultsByFamily($families)->fetchAll();
+        $familyMembers = array_merge($familyMembers, $familyGateway->selectChildrenByFamily($families)->fetchAll());
+        foreach ($familyMembers as $member) {
+            $people[$member['gibbonPersonID']] = Format::name('', $member['preferredName'], $member['surname'], 'Student', true, true);
+        }
+        asort($people);
 
         $row = $form->addRow();
             $row->addLabel('gibbonPersonID', __m('Student'));
             $row->addSelectPerson('gibbonPersonID', $session->get('gibbonSchoolYearID'), ['includeStudents' => true])
-                ->fromArray($children)
+                ->fromArray($people)
                 ->selected($gibbonPersonID)
                 ->placeholder();
 
@@ -82,91 +90,73 @@ if (isActionAccessible($guid, $connection2, '/modules/Class Enrolment/enrolment.
 
         if ($gibbonPersonID != '') {
             // CHECK ACCESS TO STUDENT
-            $studentGateway = $container->get(StudentGateway::class);
-            $students = $studentGateway->selectActiveStudentsByFamilyAdult($session->get('gibbonSchoolYearID'), $session->get('gibbonPersonID'))->toDataSet();
-            $checkCount = false;
-            foreach ($students as $student) {
-                if ($student['gibbonPersonID'] == $gibbonPersonID) {
-                    $checkCount = true;
-                }
-            }
-            if ($session->get('gibbonPersonID') == $gibbonPersonID) {
-                $checkCount = true;
-            }
-
-            if (!$checkCount) {
+            if (!array_key_exists($gibbonPersonID, $people)) {
                 echo "<div class='error'>";
                 echo __('The selected record does not exist, or you do not have access to it.');
                 echo '</div>';
             } else {
+                $studentGateway = $container->get(StudentGateway::class);
                 $student = $studentGateway->selectActiveStudentByPerson($session->get('gibbonSchoolYearID'), $gibbonPersonID)->fetch();
 
-                if ($student['gibbonPersonID'] != $gibbonPersonID) {
-                    echo "<div class='error'>";
-                    echo __('The selected record does not exist, or you do not have access to it.');
-                    echo '</div>';
+                // FORM
+                $form = Form::create('settings', $gibbon->session->get('absoluteURL').'/modules/Class Enrolment/enrolmentProcess.php');
+                $form->setTitle(__m('Add Enrolment'));
+
+                $form->addHiddenValue('address', $gibbon->session->get('address'));
+                $form->addHiddenValue('gibbonPersonID', $gibbonPersonID);
+
+                $courseEnrolmentGateway = $container->get(CourseEnrolmentGateway::class);
+
+                $classes = array();
+                $enrolableClasses = $courseEnrolmentGateway->selectEnrolableClassesByYearGroup($session->get('gibbonSchoolYearID'), $student['gibbonYearGroupID'])->fetchAll();
+
+                if (!empty($enrolableClasses)) {
+                    $classes['--'.__m('Enrolable Classes').'--'] = Format::keyValue($enrolableClasses, 'gibbonCourseClassID', function ($item) {
+                        $courseClassName = $item['courseName']." (Class ".$item['class'].")";
+                        $teacherName = Format::name('', $item['preferredName'], $item['surname'], 'Staff');
+
+                        return $courseClassName .' - '. (!empty($teacherName)? $teacherName : '');
+                    });
                 }
-                else {
-                    // FORM
-                    $form = Form::create('settings', $gibbon->session->get('absoluteURL').'/modules/Class Enrolment/enrolmentProcess.php');
-                    $form->setTitle(__m('Add Enrolment'));
 
-                    $form->addHiddenValue('address', $gibbon->session->get('address'));
-                    $form->addHiddenValue('gibbonPersonID', $gibbonPersonID);
+                $row = $form->addRow();
+                    $row->addLabel('gibbonCourseClassID', __('Classes'));
+                    $row->addSelect('gibbonCourseClassID')->fromArray($classes)->selectMultiple()->required();
 
-                    $courseEnrolmentGateway = $container->get(CourseEnrolmentGateway::class);
+                $row = $form->addRow();
+                    $row->addFooter();
+                    $row->addSubmit();
 
-                    $classes = array();
-                    $enrolableClasses = $courseEnrolmentGateway->selectEnrolableClassesByYearGroup($session->get('gibbonSchoolYearID'), $student['gibbonYearGroupID'])->fetchAll();
+                echo $form->getOutput();
 
-                    if (!empty($enrolableClasses)) {
-                        $classes['--'.__m('Enrolable Classes').'--'] = Format::keyValue($enrolableClasses, 'gibbonCourseClassID', function ($item) {
-                            $courseClassName = $item['courseName']." (Class ".$item['class'].")";
-                            $teacherName = Format::name('', $item['preferredName'], $item['surname'], 'Staff');
+                // CURRENT ENROLMENT TABLE
+                // Query
+                $criteria = $courseEnrolmentGateway->newQueryCriteria(true)
+                    ->sortBy('roleSortOrder')
+                    ->sortBy(['course', 'class'])
+                    ->fromPOST();
 
-                            return $courseClassName .' - '. (!empty($teacherName)? $teacherName : '');
-                        });
-                    }
+                $enrolment = $courseEnrolmentGateway->queryCourseEnrolmentByPerson($criteria, $session->get('gibbonSchoolYearID'), $gibbonPersonID);
 
-                    $row = $form->addRow();
-                        $row->addLabel('gibbonCourseClassID', __('Classes'));
-                        $row->addSelect('gibbonCourseClassID')->fromArray($classes)->selectMultiple();
+                // Data Table
+                $table = DataTable::create('activities');
+                $table->setTitle(__m('Current Enrolment'));
 
-                    $row = $form->addRow();
-                        $row->addFooter();
-                        $row->addSubmit();
+                $table->addColumn('courseClass', __('Class Code'))
+                      ->sortable(['course', 'class'])
+                      ->format(Format::using('courseClassName', ['course', 'class']));
+                $table->addColumn('courseName', __('Course'));
 
-                    echo $form->getOutput();
+                // ACTIONS
+                $table->addActionColumn()
+                    ->addParam('gibbonCourseClassID')
+                    ->addParam('gibbonPersonID', $gibbonPersonID)
+                    ->format(function ($class, $actions) {
+                        $actions->addAction('delete', __('Delete'))
+                            ->setURL('/modules/Class Enrolment/enrolment_delete.php');
+                    });
 
-                    // CURRENT ENROLMENT TABLE
-                    // Query
-                    $criteria = $courseEnrolmentGateway->newQueryCriteria(true)
-                        ->sortBy('roleSortOrder')
-                        ->sortBy(['course', 'class'])
-                        ->fromPOST();
-
-                    $enrolment = $courseEnrolmentGateway->queryCourseEnrolmentByPerson($criteria, $session->get('gibbonSchoolYearID'), $gibbonPersonID);
-
-                    // Data Table
-                    $table = DataTable::create('activities');
-                    $table->setTitle(__m('Current Enrolment'));
-
-                    $table->addColumn('courseClass', __('Class Code'))
-                          ->sortable(['course', 'class'])
-                          ->format(Format::using('courseClassName', ['course', 'class']));
-                    $table->addColumn('courseName', __('Course'));
-
-                    // ACTIONS
-                    $table->addActionColumn()
-                        ->addParam('gibbonCourseClassID')
-                        ->addParam('gibbonPersonID', $gibbonPersonID)
-                        ->format(function ($class, $actions) {
-                            $actions->addAction('delete', __('Delete'))
-                                ->setURL('/modules/Class Enrolment/enrolment_delete.php');
-                        });
-
-                    echo $table->render($enrolment);
-                }
+                echo $table->render($enrolment);
             }
         }
     }
