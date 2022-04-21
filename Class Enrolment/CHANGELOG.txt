@@ -1,5 +1,9 @@
 CHANGELOG
 =========
+v1.1.01
+-------
+Fixed bug causing classes to not show for future students
+
 v1.1.00
 -------
 Added ability to enrol all children and adults in all families in which the user is an adult with data access

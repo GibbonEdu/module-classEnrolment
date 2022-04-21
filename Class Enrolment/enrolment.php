@@ -96,7 +96,7 @@ if (isActionAccessible($guid, $connection2, '/modules/Class Enrolment/enrolment.
                 echo '</div>';
             } else {
                 $studentGateway = $container->get(StudentGateway::class);
-                $student = $studentGateway->selectActiveStudentByPerson($session->get('gibbonSchoolYearID'), $gibbonPersonID)->fetch();
+                $student = $studentGateway->selectActiveStudentByPerson($session->get('gibbonSchoolYearID'), $gibbonPersonID, false)->fetch();
 
                 // FORM
                 $form = Form::create('settings', $gibbon->session->get('absoluteURL').'/modules/Class Enrolment/enrolmentProcess.php');
