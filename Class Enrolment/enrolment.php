@@ -115,7 +115,7 @@ if (isActionAccessible($guid, $connection2, '/modules/Class Enrolment/enrolment.
                         $courseClassName = $item['courseName']." (Class ".$item['class'].")";
                         $teacherName = Format::name('', $item['preferredName'], $item['surname'], 'Staff');
 
-                        return $courseClassName .' - '. (!empty($teacherName)? $teacherName : '');
+                        return $courseClassName.' - '.(!empty($teacherName)? $teacherName : '').((is_numeric($item['enrolmentMax']) && $item['studentCount'] > $item['enrolmentMax']) ? ' (DISABLED)' : '');
                     });
                 }
 
