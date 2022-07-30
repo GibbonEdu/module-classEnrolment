@@ -20,6 +20,18 @@ $sql[$count][1] = "";
 $count++;
 
 //v1.1.00
+$sql[$count][0] = "1.1.00";
+$sql[$count][1] = "";
+$count++;
+
+//v1.1.01
 $sql[$count][0] = "1.1.01";
 $sql[$count][1] = "";
+$count++;
+
+//v1.2.00
+$sql[$count][0] = "1.2.00";
+$sql[$count][1] = "
+INSERT INTO `gibbonSetting` (`gibbonSettingID` ,`scope` ,`name` ,`nameDisplay` ,`description` ,`value`) VALUES (NULL , 'Class Enrolment', 'useDatabaseLocking', 'Use Database Locking', 'Ensures fidelity of minimum and maximum enrolment, but comes with a performance cost.', 'Y');end
+";
 $count++;

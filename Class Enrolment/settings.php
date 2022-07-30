@@ -50,6 +50,11 @@ if (isActionAccessible($guid, $connection2, '/modules/Class Enrolment/settings.p
         $col->addDate('closeParentEnrolmentDate')->setValue(Format::date(substr($setting['value'], 0, 11)))->addClass('mr-2');
         $col->addTime('closeParentEnrolmentTime')->setValue(substr($setting['value'], 11, 5));
 
+    $setting = $settingGateway->getSettingByScope('Class Enrolment', 'useDatabaseLocking', true);
+    $row = $form->addRow();
+        $row->addLabel($setting['name'], __m($setting['nameDisplay']))->description(__m($setting['description']));
+        $row->addYesNo($setting['name'])->selected($setting['value'])->required();
+
     $row = $form->addRow();
         $row->addFooter();
         $row->addSubmit();

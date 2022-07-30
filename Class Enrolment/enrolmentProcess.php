@@ -18,7 +18,9 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
 use Gibbon\Domain\User\FamilyGateway;
+use Gibbon\Domain\System\SettingGateway;
 use Gibbon\Domain\Students\StudentGateway;
+use Gibbon\Domain\Timetable\CourseGateway;
 use Gibbon\Domain\Timetable\CourseEnrolmentGateway;
 
 include '../../gibbon.php';
@@ -55,22 +57,53 @@ if ($gibbonPersonID == '' or count($gibbonCourseClassIDs) < 1) {
         } else {
             $partialFail = false;
 
+            $settingGateway = $container->get(SettingGateway::class);
+            $courseGateway = $container->get(CourseGateway::class);
             $courseEnrolmentGateway = $container->get(CourseEnrolmentGateway::class);
 
-            foreach  ($gibbonCourseClassIDs AS $gibbonCourseClassID) {
-                $courseEnrolment = $courseEnrolmentGateway->selectBy(['gibbonCourseClassID' => $gibbonCourseClassID, 'gibbonPersonID' => $gibbonPersonID])->fetch();
-                if (empty($courseEnrolment['role'])) { // INSERT
-                    $inserted = $courseEnrolmentGateway->insert(['gibbonCourseClassID' => $gibbonCourseClassID, 'gibbonPersonID' => $gibbonPersonID, 'role' => 'Student', 'dateEnrolled' => date('Y-m-d')]);
-                    if (!$inserted) {
-                        $partialFail = true;
-                    }
-                } else if ($courseEnrolment['role'] != 'Student') { // UPDATE
-                    $updated = $courseEnrolmentGateway->update($courseEnrolment['gibbonCourseClassPersonID'], ['role' => 'Student', 'dateEnrolled' => date('Y-m-d'), 'dateUnenrolled' => null]);
-                    if (!$updated) {
-                        $partialFail = true;
+            $useDatabaseLocking = $settingGateway->getSettingByScope('Class Enrolment', 'useDatabaseLocking');
+
+            // Lock database table, depending on useDatabaseLocking setting
+            if ($useDatabaseLocking == "Y") {
+                try {
+                    $sql = 'LOCK TABLES gibbonCourseClassPerson WRITE, gibbonSchoolYear READ, gibbonCourse READ, gibbonCourseClass READ, gibbonPerson READ';
+                    $result = $connection2->query($sql);
+                } catch (PDOException $e) {
+                    $URL .= '&return=error2';
+                    header("Location: {$URL}");
+                    exit();
+                }
+            }
+
+            // Insert/update enrolment records
+            foreach ($gibbonCourseClassIDs AS $gibbonCourseClassID) {
+                $course = $courseGateway->getCourseClassByID($gibbonCourseClassID);
+                $currentCourseEnrolment = $courseEnrolmentGateway->getClassStudentCount($gibbonCourseClassID, false);
+                if (is_numeric($course['enrolmentMax']) && $currentCourseEnrolment > $course['enrolmentMax']) {
+                    $partialFail = true;
+                }
+                else {
+                    $courseEnrolment = $courseEnrolmentGateway->selectBy(['gibbonCourseClassID' => $gibbonCourseClassID, 'gibbonPersonID' => $gibbonPersonID])->fetch();
+                    if (empty($courseEnrolment['role'])) { // INSERT
+                        $inserted = $courseEnrolmentGateway->insert(['gibbonCourseClassID' => $gibbonCourseClassID, 'gibbonPersonID' => $gibbonPersonID, 'role' => 'Student', 'dateEnrolled' => date('Y-m-d')]);
+                        if (!$inserted) {
+                            $partialFail = true;
+                        }
+                    } else if ($courseEnrolment['role'] != 'Student') { // UPDATE
+                        $updated = $courseEnrolmentGateway->update($courseEnrolment['gibbonCourseClassPersonID'], ['role' => 'Student', 'dateEnrolled' => date('Y-m-d'), 'dateUnenrolled' => null]);
+                        if (!$updated) {
+                            $partialFail = true;
+                        }
                     }
                 }
             }
+
+            // Unlock database table, depending on useDatabaseLocking setting
+            if ($useDatabaseLocking == "Y") {
+                $sql = 'UNLOCK TABLES';
+                $result = $connection2->query($sql);
+            }
+
 
             if ($partialFail) {
                $URL .= '&return=warning1';

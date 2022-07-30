@@ -110,13 +110,21 @@ if (isActionAccessible($guid, $connection2, '/modules/Class Enrolment/enrolment.
                 $classes = array();
                 $enrolableClasses = $courseEnrolmentGateway->selectEnrolableClassesByYearGroup($session->get('gibbonSchoolYearID'), $student['gibbonYearGroupID'])->fetchAll();
 
+                $disabledClasses = [];
                 if (!empty($enrolableClasses)) {
                     $classes['--'.__m('Enrolable Classes').'--'] = Format::keyValue($enrolableClasses, 'gibbonCourseClassID', function ($item) {
                         $courseClassName = $item['courseName']." (Class ".$item['class'].")";
                         $teacherName = Format::name('', $item['preferredName'], $item['surname'], 'Staff');
 
-                        return $courseClassName.' - '.(!empty($teacherName)? $teacherName : '').((is_numeric($item['enrolmentMax']) && $item['studentCount'] > $item['enrolmentMax']) ? ' (DISABLED)' : '');
+                        return $courseClassName.(!empty($teacherName)? ' - '.$teacherName : '').(is_numeric($item['enrolmentMax']) && $item['studentCount'] > $item['enrolmentMax'] ? " (".__m('Full').")" : '');
                     });
+
+                    // Determine which classes to disable based on enrolmentMax
+                    foreach ($enrolableClasses as $item) {
+                        if (is_numeric($item['enrolmentMax']) && $item['studentCount'] > $item['enrolmentMax']) {
+                            $disabledClasses[] = $item['gibbonCourseClassID'];
+                        }
+                    }
                 }
 
                 $row = $form->addRow();
@@ -128,6 +136,15 @@ if (isActionAccessible($guid, $connection2, '/modules/Class Enrolment/enrolment.
                     $row->addSubmit();
 
                 echo $form->getOutput();
+
+                // Create JS to disable classes based on enrolmentMax
+                echo "<script type='text/javascript'>";
+                    echo '$(document).ready(function(){';
+                        foreach ($disabledClasses as $item) {
+                            echo "$(\"#gibbonCourseClassID option[value='".$item."']\").attr(\"disabled\",\"disabled\");";
+                        }
+                    echo '});';
+                echo '</script>';
 
                 // CURRENT ENROLMENT TABLE
                 // Query

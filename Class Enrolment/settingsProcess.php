@@ -34,17 +34,32 @@ if (isActionAccessible($guid, $connection2, '/modules/Class Enrolment/settings.p
 
     $settingsToUpdate = [
         'Class Enrolment' => [
-            'openParentEnrolment',
-            'closeParentEnrolment'
+            'openParentEnrolment' => '',
+            'closeParentEnrolment' => '',
+            'useDatabaseLocking' => 'required'
         ],
     ];
 
+    // Validate required fields
     foreach ($settingsToUpdate as $scope => $settings) {
-        foreach ($settings as $name) {
-            $value = '';
+        foreach ($settings as $name => $property) {
+            if ($property == 'required' && empty($_POST[$name])) {
+                $URL .= '&return=error1';
+                header("Location: {$URL}");
+                exit;
+            }
+        }
+    }
+
+    // Update fields
+    foreach ($settingsToUpdate as $scope => $settings) {
+        foreach ($settings as $name => $property) {
+            $value = $_POST[$name] ?? '';
             if (!empty($_POST[$name.'Date'])) {
                 $value = Format::dateConvert($_POST[$name.'Date']).' '.(!empty($_POST[$name.'Time']) ? $_POST[$name.'Time'] : '00:00');
             }
+
+            if ($property == 'skip-empty' && empty($value)) continue;
 
             $updated = $settingGateway->updateSettingByScope($scope, $name, $value);
             $partialFail &= !$updated;
