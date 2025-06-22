@@ -25,7 +25,7 @@ $description = "A simple module for allowing parents to enrol their children in 
 $entryURL = "enrolment.php";
 $type = "Additional";
 $category = "Learn";
-$version = "1.3.00";
+$version = "1.3.01";
 $author = "Gibbon Foundation";
 $url = "https://gibbonedu.org";
 

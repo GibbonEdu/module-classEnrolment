@@ -33,10 +33,10 @@ if (isActionAccessible($guid, $connection2, '/modules/Class Enrolment/settings.p
     $settingGateway = $container->get(SettingGateway::class);
 
     // FORM
-    $form = Form::create('settings', $gibbon->session->get('absoluteURL').'/modules/Class Enrolment/settingsProcess.php');
+    $form = Form::create('settings', $session->get('absoluteURL').'/modules/Class Enrolment/settingsProcess.php');
     $form->setTitle(__('Settings'));
 
-    $form->addHiddenValue('address', $gibbon->session->get('address'));
+    $form->addHiddenValue('address', $session->get('address'));
 
     $setting = $settingGateway->getSettingByScope('Class Enrolment', 'openParentEnrolment', true);
     $row = $form->addRow();

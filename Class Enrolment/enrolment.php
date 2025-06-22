@@ -101,10 +101,10 @@ if (isActionAccessible($guid, $connection2, '/modules/Class Enrolment/enrolment.
                 $student = $studentGateway->selectActiveStudentByPerson($session->get('gibbonSchoolYearID'), $gibbonPersonID, false)->fetch();
 
                 // FORM
-                $form = Form::create('settings', $gibbon->session->get('absoluteURL').'/modules/Class Enrolment/enrolmentProcess.php');
+                $form = Form::create('settings', $session->get('absoluteURL').'/modules/Class Enrolment/enrolmentProcess.php');
                 $form->setTitle(__m('Add Enrolment'));
 
-                $form->addHiddenValue('address', $gibbon->session->get('address'));
+                $form->addHiddenValue('address', $session->get('address'));
                 $form->addHiddenValue('gibbonPersonID', $gibbonPersonID);
 
                 $courseEnrolmentGateway = $container->get(CourseEnrolmentGateway::class);

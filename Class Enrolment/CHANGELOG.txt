@@ -1,5 +1,9 @@
 CHANGELOG
 =========
+v1.3.01
+-------
+Replace deprecated $gibbon->session calls
+
 v1.3.00
 -------
 Transferred ownership from Ross Parker to Gibbon Foundation

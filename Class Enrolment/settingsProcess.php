@@ -24,7 +24,7 @@ use Gibbon\Domain\System\SettingGateway;
 
 require_once '../../gibbon.php';
 
-$URL = $gibbon->session->get('absoluteURL').'/index.php?q=/modules/Class Enrolment/settings.php';
+$URL = $session->get('absoluteURL').'/index.php?q=/modules/Class Enrolment/settings.php';
 
 if (isActionAccessible($guid, $connection2, '/modules/Class Enrolment/settings.php') == false) {
     $URL .= '&return=error0';
