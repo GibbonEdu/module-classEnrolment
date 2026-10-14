@@ -12,20 +12,21 @@ the Free Software Foundation, either version 3 of the License, or
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with this program. If not, see <http://www.gnu.org/licenses/>.
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 use Gibbon\Forms\Form;
 use Gibbon\Services\Format;
 use Gibbon\Tables\DataTable;
-use Gibbon\Domain\User\FamilyGateway;
+use Gibbon\Contracts\Database\Connection;
 use Gibbon\Domain\System\SettingGateway;
-use Gibbon\Domain\Students\StudentGateway;
 use Gibbon\Domain\Timetable\CourseEnrolmentGateway;
+
+require_once __DIR__.'/moduleFunctions.php';
 
 if (isActionAccessible($guid, $connection2, '/modules/Class Enrolment/enrolment.php') == false) {
     // Access denied
@@ -34,149 +35,184 @@ if (isActionAccessible($guid, $connection2, '/modules/Class Enrolment/enrolment.
     //Proceed!
     $page->breadcrumbs->add(__m('Enrolment'));
 
+    $page->return->addReturns(array_merge(classEnrolmentUnenrolmentReturns(), [
+        'error4'   => __m('One or more of the selected classes is not available for this student.'),
+        'warning1' => __m('Your request was partially successful: one or more classes were full and could not be added.'),
+    ]));
+
     $settingGateway = $container->get(SettingGateway::class);
+    $window = classEnrolmentGetWindow($settingGateway);
 
-    $now = date('Y-m-d H:i');
-    $openParentEnrolment = $settingGateway->getSettingByScope('Class Enrolment', 'openParentEnrolment');
-    $closeParentEnrolment = $settingGateway->getSettingByScope('Class Enrolment', 'closeParentEnrolment');
-
-    if (!empty($openParentEnrolment) && !empty($closeParentEnrolment) && $openParentEnrolment >= $closeParentEnrolment) { // Invalid dates
+    if ($window['status'] == 'invalid') {
         $page->addError(__m('The settings for class enrolments are invalid'));
-    } else if ((!empty($openParentEnrolment) && $now < $openParentEnrolment) || (!empty($closeParentEnrolment) && $now > $closeParentEnrolment) || ($now < $openParentEnrolment && $now > $closeParentEnrolment)) { // Closed
-        if ((!empty($openParentEnrolment) && $now < $openParentEnrolment)) {
-            $page->addWarning(__m('The window for adding and editing class enrolments will open at {time} on {date}.', ['date' => Format::date(substr($openParentEnrolment, 0, 11)), 'time' => substr($openParentEnrolment, 11, 5)]));
-        } else {
-            $page->addWarning(__m('The window for adding and editing class enrolments is currently closed.'));
-        }
-    } else { // Open
-        if ((!empty($closeParentEnrolment) && $now < $closeParentEnrolment)) {
-            $page->addMessage(__m('The window for adding and editing class enrolments is currently open, but will close at {time} on {date}.', ['date' => Format::date(substr($closeParentEnrolment, 0, 11)), 'time' => substr($closeParentEnrolment, 11, 5)]));
-        } else {
-            $page->addMessage(__m('The window for adding and editing class enrolments is currently open.'));
-        }
+        return;
+    }
 
-        // SELECT STUDENT
-        $gibbonPersonID = $_GET['gibbonPersonID'] ?? null;
+    if ($window['status'] == 'notYetOpen') {
+        $page->addWarning(__m('The window for adding and editing class enrolments will open at {time} on {date}.', ['date' => Format::date(substr($window['open'], 0, 10)), 'time' => substr($window['open'], 11, 5)]));
+        return;
+    }
 
-		$form = Form::create('selectFamily', $session->get('absoluteURL').'/index.php', 'get');
-		$form->addHiddenValue('q', '/modules/'.$session->get('module').'/enrolment.php');
+    if ($window['status'] == 'closed') {
+        $page->addWarning(__m('The window for adding and editing class enrolments is currently closed.'));
+        return;
+    }
 
-        $form->setTitle(__m('Select Student'));
+    if (!empty($window['close'])) {
+        $page->addMessage(__m('The window for adding and editing class enrolments is currently open, but will close at {time} on {date}.', ['date' => Format::date(substr($window['close'], 0, 10)), 'time' => substr($window['close'], 11, 5)]));
+    } else {
+        $page->addMessage(__m('The window for adding and editing class enrolments is currently open.'));
+    }
 
-        // Prepare array of family members
-        $familyGateway = $container->get(FamilyGateway::class);
-        $families = [];
-        $familyMembers = [] ;
-        $people = [];
-        foreach ($familyGateway->selectFamiliesByAdult($session->get('gibbonPersonID'))->fetchAll() as $family) {
-            $families[] = $family["gibbonFamilyID"];
-        }
-        $familyMembers = $familyGateway->selectAdultsByFamily($families)->fetchAll();
-        $familyMembers = array_merge($familyMembers, $familyGateway->selectChildrenByFamily($families)->fetchAll());
-        foreach ($familyMembers as $member) {
-            $people[$member['gibbonPersonID']] = Format::name('', $member['preferredName'], $member['surname'], 'Student', true, true);
-        }
-        asort($people);
+    $gibbonSchoolYearID = $session->get('gibbonSchoolYearID');
+    $gibbonPersonID = $_GET['gibbonPersonID'] ?? '';
 
-        $row = $form->addRow();
-            $row->addLabel('gibbonPersonID', __m('Student'));
-            $row->addSelectPerson('gibbonPersonID', $session->get('gibbonSchoolYearID'), ['includeStudents' => true])
-                ->fromArray($people)
-                ->selected($gibbonPersonID)
-                ->placeholder();
+    // People this user may enrol: active students only
+    $people = classEnrolmentGetAccessiblePeople($container->get(Connection::class), $gibbonSchoolYearID, $session->get('gibbonPersonID'));
 
-		$row = $form->addRow();
-            $row->addSubmit(__('Go'));
+    if (empty($people)) {
+        $page->addMessage(__m('There are no students in your family who can be enrolled in classes this school year.'));
+        return;
+    }
 
-		echo $form->getOutput();
+    // SELECT STUDENT
+    $form = Form::create('selectFamily', $session->get('absoluteURL').'/index.php', 'get');
+    $form->addHiddenValue('q', '/modules/Class Enrolment/enrolment.php');
+    $form->setTitle(__m('Select Student'));
 
-        if ($gibbonPersonID != '') {
-            // CHECK ACCESS TO STUDENT
-            if (!array_key_exists($gibbonPersonID, $people)) {
-                echo "<div class='error'>";
-                echo __('The selected record does not exist, or you do not have access to it.');
-                echo '</div>';
-            } else {
-                $studentGateway = $container->get(StudentGateway::class);
-                $student = $studentGateway->selectActiveStudentByPerson($session->get('gibbonSchoolYearID'), $gibbonPersonID, false)->fetch();
+    $peopleOptions = array_map(function ($person) {
+        return Format::name('', $person['preferredName'], $person['surname'], 'Student', true, true);
+    }, $people);
 
-                // FORM
-                $form = Form::create('settings', $session->get('absoluteURL').'/modules/Class Enrolment/enrolmentProcess.php');
-                $form->setTitle(__m('Add Enrolment'));
+    $row = $form->addRow();
+        $row->addLabel('gibbonPersonID', __m('Student'));
+        $row->addSelect('gibbonPersonID')
+            ->fromArray($peopleOptions)
+            ->selected($gibbonPersonID)
+            ->placeholder()
+            ->required();
 
-                $form->addHiddenValue('address', $session->get('address'));
-                $form->addHiddenValue('gibbonPersonID', $gibbonPersonID);
+    $row = $form->addRow();
+        $row->addSubmit(__('Go'));
 
-                $courseEnrolmentGateway = $container->get(CourseEnrolmentGateway::class);
+    echo $form->getOutput();
 
-                $classes = array();
-                $enrolableClasses = $courseEnrolmentGateway->selectEnrolableClassesByYearGroup($session->get('gibbonSchoolYearID'), $student['gibbonYearGroupID'])->fetchAll();
+    if (empty($gibbonPersonID)) {
+        return;
+    }
 
-                $disabledClasses = [];
-                if (!empty($enrolableClasses)) {
-                    $classes['--'.__m('Enrolable Classes').'--'] = Format::keyValue($enrolableClasses, 'gibbonCourseClassID', function ($item) {
-                        $courseClassName = $item['courseName']." (Class ".$item['class'].")";
-                        $teacherName = Format::name('', $item['preferredName'], $item['surname'], 'Staff');
+    // CHECK ACCESS TO STUDENT
+    if (empty($people[$gibbonPersonID])) {
+        $page->addError(__('The selected record does not exist, or you do not have access to it.'));
+        return;
+    }
 
-                        return $courseClassName.(!empty($teacherName)? ' - '.$teacherName : '').(is_numeric($item['enrolmentMax']) && $item['studentCount'] > $item['enrolmentMax'] ? " (".__m('Full').")" : '');
-                    });
+    $student = $people[$gibbonPersonID];
+    $courseEnrolmentGateway = $container->get(CourseEnrolmentGateway::class);
+    $enrolableClasses = classEnrolmentGetEnrolableClasses($courseEnrolmentGateway, $gibbonSchoolYearID, $student['gibbonYearGroupID']);
+    $allowUnenrolment = $settingGateway->getSettingByScope('Class Enrolment', 'allowParentUnenrolment') != 'N';
 
-                    // Determine which classes to disable based on enrolmentMax
-                    foreach ($enrolableClasses as $item) {
-                        if (is_numeric($item['enrolmentMax']) && $item['studentCount'] > $item['enrolmentMax']) {
-                            $disabledClasses[] = $item['gibbonCourseClassID'];
-                        }
-                    }
-                }
+    // CURRENT ENROLMENT
+    $criteria = $courseEnrolmentGateway->newQueryCriteria(true)
+        ->sortBy('roleSortOrder')
+        ->sortBy(['course', 'class'])
+        ->fromPOST();
 
-                $row = $form->addRow();
-                    $row->addLabel('gibbonCourseClassID', __('Classes'));
-                    $row->addSelect('gibbonCourseClassID')->fromArray($classes)->selectMultiple()->required();
+    $enrolment = $courseEnrolmentGateway->queryCourseEnrolmentByPerson($criteria, $gibbonSchoolYearID, $gibbonPersonID);
 
-                $row = $form->addRow();
-                    $row->addFooter();
-                    $row->addSubmit();
-
-                echo $form->getOutput();
-
-                // Create JS to disable classes based on enrolmentMax
-                echo "<script type='text/javascript'>";
-                    echo '$(document).ready(function(){';
-                        foreach ($disabledClasses as $item) {
-                            echo "$(\"#gibbonCourseClassID option[value='".$item."']\").attr(\"disabled\",\"disabled\");";
-                        }
-                    echo '});';
-                echo '</script>';
-
-                // CURRENT ENROLMENT TABLE
-                // Query
-                $criteria = $courseEnrolmentGateway->newQueryCriteria(true)
-                    ->sortBy('roleSortOrder')
-                    ->sortBy(['course', 'class'])
-                    ->fromPOST();
-
-                $enrolment = $courseEnrolmentGateway->queryCourseEnrolmentByPerson($criteria, $session->get('gibbonSchoolYearID'), $gibbonPersonID);
-
-                // Data Table
-                $table = DataTable::create('activities');
-                $table->setTitle(__m('Current Enrolment'));
-
-                $table->addColumn('courseClass', __('Class Code'))
-                      ->sortable(['course', 'class'])
-                      ->format(Format::using('courseClassName', ['course', 'class']));
-                $table->addColumn('courseName', __('Course'));
-
-                // ACTIONS
-                $table->addActionColumn()
-                    ->addParam('gibbonCourseClassID')
-                    ->addParam('gibbonPersonID', $gibbonPersonID)
-                    ->format(function ($class, $actions) {
-                        $actions->addAction('delete', __('Delete'))
-                            ->setURL('/modules/Class Enrolment/enrolment_delete.php');
-                    });
-
-                echo $table->render($enrolment);
-            }
+    $enrolledClassIDs = [];
+    foreach ($enrolment as $class) {
+        if ($class['role'] == 'Student') {
+            $enrolledClassIDs[] = $class['gibbonCourseClassID'];
         }
     }
+
+    // ADD ENROLMENT FORM
+    $form = Form::create('enrolment', $session->get('absoluteURL').'/modules/Class Enrolment/enrolmentProcess.php');
+    $form->setTitle(__m('Add Enrolment'));
+
+    $form->addHiddenValue('address', $session->get('address'));
+    $form->addHiddenValue('gibbonPersonID', $gibbonPersonID);
+
+    $classOptions = [];
+    $disabledClasses = [];
+    foreach ($enrolableClasses as $gibbonCourseClassID => $class) {
+        $label = $class['courseName'].' ('.__('Class').' '.$class['class'].')';
+        $teacherName = Format::name('', $class['preferredName'], $class['surname'], 'Staff');
+        if (!empty($teacherName)) {
+            $label .= ' - '.$teacherName;
+        }
+
+        if (in_array($gibbonCourseClassID, $enrolledClassIDs)) {
+            $label .= ' ('.__m('Enrolled').')';
+            $disabledClasses[] = $gibbonCourseClassID;
+        } elseif (classEnrolmentIsFull($class['enrolmentMax'], $class['studentCount'])) {
+            $label .= ' ('.__m('Full').')';
+            $disabledClasses[] = $gibbonCourseClassID;
+        } elseif ($needed = classEnrolmentStudentsNeeded($class['enrolmentMin'], $class['studentCount'])) {
+            $label .= ' ('.($needed == 1
+                ? __m('needs 1 more student to run')
+                : __m('needs {count} more students to run', ['count' => $needed])).')';
+        }
+
+        $classOptions[$gibbonCourseClassID] = $label;
+    }
+
+    if (empty($classOptions)) {
+        $form->addRow()->addAlert(__m('There are no classes available for this student\'s year group.'), 'message');
+    } else {
+        $row = $form->addRow();
+            $row->addLabel('gibbonCourseClassID', __('Classes'));
+            $row->addSelect('gibbonCourseClassID')
+                ->fromArray([__m('Enrolable Classes') => $classOptions])
+                ->selectMultiple()
+                ->required();
+
+        $row = $form->addRow();
+            $row->addFooter();
+            $row->addSubmit();
+    }
+
+    echo $form->getOutput();
+
+    // Disable full and already-enrolled classes in the picker (the server checks again on submit)
+    if (!empty($disabledClasses)) {
+        echo '<script type="text/javascript">';
+        echo 'document.addEventListener("DOMContentLoaded", function() {';
+        echo 'var ids = '.json_encode(array_values(array_map('strval', $disabledClasses))).';';
+        echo 'document.querySelectorAll("#gibbonCourseClassID option").forEach(function(option) {';
+        echo 'if (ids.indexOf(option.value) !== -1) { option.disabled = true; }';
+        echo '});';
+        echo '});';
+        echo '</script>';
+    }
+
+    // CURRENT ENROLMENT TABLE
+    $table = DataTable::create('currentEnrolment');
+    $table->setTitle(__m('Current Enrolment'));
+
+    if (!$allowUnenrolment) {
+        $table->setDescription(__m('Please contact the school to remove a class from this timetable.'));
+    }
+
+    $table->addColumn('courseClass', __('Class Code'))
+        ->sortable(['course', 'class'])
+        ->format(Format::using('courseClassName', ['course', 'class']));
+    $table->addColumn('courseName', __('Course'));
+    $table->addColumn('role', __('Role'))->translatable();
+
+    $table->addActionColumn()
+        ->addParam('gibbonCourseClassID')
+        ->addParam('gibbonPersonID', $gibbonPersonID)
+        ->format(function ($class, $actions) use ($allowUnenrolment, $enrolableClasses) {
+            // Only student enrolments in classes open to this year group can be removed here
+            if (!$allowUnenrolment || $class['role'] != 'Student' || empty($enrolableClasses[$class['gibbonCourseClassID']])) {
+                return;
+            }
+
+            $actions->addAction('delete', __('Delete'))
+                ->setURL('/modules/Class Enrolment/enrolment_delete.php');
+        });
+
+    echo $table->render($enrolment);
 }

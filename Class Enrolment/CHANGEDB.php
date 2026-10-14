@@ -48,3 +48,10 @@ UPDATE gibbonModule SET author='Gibbon Foundation', url='https://gibbonedu.org' 
 $count++;
 $sql[$count][0] = "1.3.01";
 $sql[$count][1] = "";
+
+//v1.4.00
+$count++;
+$sql[$count][0] = "1.4.00";
+$sql[$count][1] = "
+INSERT INTO `gibbonSetting` (`gibbonSettingID` ,`scope` ,`name` ,`nameDisplay` ,`description` ,`value`) VALUES (NULL , 'Class Enrolment', 'allowParentUnenrolment', 'Allow Parent Unenrolment', 'Can parents remove student enrolments while the window is open?', 'Y');end
+";

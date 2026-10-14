@@ -1,5 +1,18 @@
 CHANGELOG
 =========
+v1.4.00
+-------
+Fixed compatibility with Core v31, where getCourseClassByID moved to CourseClassGateway
+Fixed off-by-one in maximum enrolment check, which allowed one student over the maximum
+Enrolment window is now enforced when saving and unenrolling, not only on the page
+Selected classes are validated against the classes offered to the student's year group
+Student list now only shows active students, including adults who are themselves students
+Unenrolment is limited to student enrolments, and can be turned off
+Added Allow Parent Unenrolment setting
+Settings now validate that the close date is after the open date, and report save errors
+Classes already enrolled in are marked and disabled in the class picker
+Classes below their minimum enrolment show how many more students they need to run
+
 v1.3.01
 -------
 Replace deprecated $gibbon->session calls

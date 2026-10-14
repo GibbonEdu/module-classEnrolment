@@ -12,108 +12,126 @@ the Free Software Foundation, either version 3 of the License, or
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with this program. If not, see <http://www.gnu.org/licenses/>.
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-use Gibbon\Domain\User\FamilyGateway;
+use Gibbon\Contracts\Database\Connection;
 use Gibbon\Domain\System\SettingGateway;
-use Gibbon\Domain\Students\StudentGateway;
-use Gibbon\Domain\Timetable\CourseGateway;
 use Gibbon\Domain\Timetable\CourseEnrolmentGateway;
 
 include '../../gibbon.php';
+require_once __DIR__.'/moduleFunctions.php';
 
 $gibbonCourseClassIDs = $_POST['gibbonCourseClassID'] ?? [];
+$gibbonCourseClassIDs = is_array($gibbonCourseClassIDs) ? array_unique(array_filter($gibbonCourseClassIDs)) : [];
 $gibbonPersonID = $_POST['gibbonPersonID'] ?? '';
 
-if ($gibbonPersonID == '' or count($gibbonCourseClassIDs) < 1) {
-    echo 'Fatal error loading this page!';
-} else {
-    $URL = $session->get('absoluteURL').'/index.php?q=/modules/'.getModuleName($_POST['address'])."/enrolment.php&gibbonPersonID=$gibbonPersonID";
+$URL = $session->get('absoluteURL').'/index.php?q=/modules/Class Enrolment/enrolment.php&gibbonPersonID='.urlencode($gibbonPersonID);
 
-    if (isActionAccessible($guid, $connection2, '/modules/Class Enrolment/enrolment.php') == false) {
-        $URL .= '&return=error0';
-        header("Location: {$URL}");
-    } else {
-        // Prepare array of family members
-        $familyGateway = $container->get(FamilyGateway::class);
-        $families = [];
-        $familyMembers = [] ;
-        $people = [];
-        foreach ($familyGateway->selectFamiliesByAdult($session->get('gibbonPersonID'))->fetchAll() as $family) {
-            $families[] = $family["gibbonFamilyID"];
-        }
-        $familyMembers = $familyGateway->selectAdultsByFamily($families)->fetchAll();
-        $familyMembers = array_merge($familyMembers, $familyGateway->selectChildrenByFamily($families)->fetchAll());
-        foreach ($familyMembers as $member) {
-            $people[] = $member['gibbonPersonID'];
-        }
+if (isActionAccessible($guid, $connection2, '/modules/Class Enrolment/enrolment.php') == false) {
+    header("Location: {$URL}&return=error0");
+    exit;
+}
 
-        if (!in_array($gibbonPersonID, $people)) {
-            $URL .= '&return=error0';
-            header("Location: {$URL}");
-        } else {
-            $partialFail = false;
+if (empty($gibbonPersonID) || empty($gibbonCourseClassIDs)) {
+    header("Location: {$URL}&return=error1");
+    exit;
+}
 
-            $settingGateway = $container->get(SettingGateway::class);
-            $courseGateway = $container->get(CourseGateway::class);
-            $courseEnrolmentGateway = $container->get(CourseEnrolmentGateway::class);
+$settingGateway = $container->get(SettingGateway::class);
+$courseEnrolmentGateway = $container->get(CourseEnrolmentGateway::class);
+$gibbonSchoolYearID = $session->get('gibbonSchoolYearID');
 
-            $useDatabaseLocking = $settingGateway->getSettingByScope('Class Enrolment', 'useDatabaseLocking');
+// The enrolment window is enforced here, not just on the page
+$window = classEnrolmentGetWindow($settingGateway);
+if ($window['status'] != 'open') {
+    header("Location: {$URL}&return=error3");
+    exit;
+}
 
-            // Lock database table, depending on useDatabaseLocking setting
-            if ($useDatabaseLocking == "Y") {
-                try {
-                    $sql = 'LOCK TABLES gibbonCourseClassPerson WRITE, gibbonSchoolYear READ, gibbonCourse READ, gibbonCourseClass READ, gibbonPerson READ';
-                    $result = $connection2->query($sql);
-                } catch (PDOException $e) {
-                    $URL .= '&return=error2';
-                    header("Location: {$URL}");
-                    exit();
-                }
-            }
+// The student must be an active student this user may act for
+$people = classEnrolmentGetAccessiblePeople($container->get(Connection::class), $gibbonSchoolYearID, $session->get('gibbonPersonID'));
+if (empty($people[$gibbonPersonID])) {
+    header("Location: {$URL}&return=error0");
+    exit;
+}
 
-            // Insert/update enrolment records
-            foreach ($gibbonCourseClassIDs AS $gibbonCourseClassID) {
-                $course = $courseGateway->getCourseClassByID($gibbonCourseClassID);
-                $currentCourseEnrolment = $courseEnrolmentGateway->getClassStudentCount($gibbonCourseClassID, false);
-                if (is_numeric($course['enrolmentMax']) && $currentCourseEnrolment > $course['enrolmentMax']) {
-                    $partialFail = true;
-                }
-                else {
-                    $courseEnrolment = $courseEnrolmentGateway->selectBy(['gibbonCourseClassID' => $gibbonCourseClassID, 'gibbonPersonID' => $gibbonPersonID])->fetch();
-                    if (empty($courseEnrolment['role'])) { // INSERT
-                        $inserted = $courseEnrolmentGateway->insert(['gibbonCourseClassID' => $gibbonCourseClassID, 'gibbonPersonID' => $gibbonPersonID, 'role' => 'Student', 'dateEnrolled' => date('Y-m-d')]);
-                        if (!$inserted) {
-                            $partialFail = true;
-                        }
-                    } else if ($courseEnrolment['role'] != 'Student') { // UPDATE
-                        $updated = $courseEnrolmentGateway->update($courseEnrolment['gibbonCourseClassPersonID'], ['role' => 'Student', 'dateEnrolled' => date('Y-m-d'), 'dateUnenrolled' => null]);
-                        if (!$updated) {
-                            $partialFail = true;
-                        }
-                    }
-                }
-            }
-
-            // Unlock database table, depending on useDatabaseLocking setting
-            if ($useDatabaseLocking == "Y") {
-                $sql = 'UNLOCK TABLES';
-                $result = $connection2->query($sql);
-            }
-
-
-            if ($partialFail) {
-               $URL .= '&return=warning1';
-               header("Location: {$URL}");
-           } else {
-               $URL .= '&return=success0';
-               header("Location: {$URL}");
-           }
-        }
+// Every class must be one offered to this student's year group in the current school year
+$enrolableClasses = classEnrolmentGetEnrolableClasses($courseEnrolmentGateway, $gibbonSchoolYearID, $people[$gibbonPersonID]['gibbonYearGroupID']);
+foreach ($gibbonCourseClassIDs as $gibbonCourseClassID) {
+    if (empty($enrolableClasses[$gibbonCourseClassID])) {
+        header("Location: {$URL}&return=error4");
+        exit;
     }
 }
+
+$useDatabaseLocking = $settingGateway->getSettingByScope('Class Enrolment', 'useDatabaseLocking') == 'Y';
+$partialFail = false;
+$classFull = false;
+
+// Lock the enrolment table so two families cannot both take the last place
+if ($useDatabaseLocking) {
+    try {
+        $connection2->query('LOCK TABLES gibbonCourseClassPerson WRITE, gibbonPerson READ');
+    } catch (PDOException $e) {
+        header("Location: {$URL}&return=error2");
+        exit;
+    }
+}
+
+try {
+    foreach ($gibbonCourseClassIDs as $gibbonCourseClassID) {
+        $courseEnrolment = $courseEnrolmentGateway->selectBy(['gibbonCourseClassID' => $gibbonCourseClassID, 'gibbonPersonID' => $gibbonPersonID])->fetch();
+
+        // Already enrolled as a student: nothing to do
+        if (!empty($courseEnrolment['role']) && $courseEnrolment['role'] == 'Student') {
+            continue;
+        }
+
+        // Count again inside the lock, as the page may be out of date
+        $studentCount = $courseEnrolmentGateway->getClassStudentCount($gibbonCourseClassID, false);
+        if (classEnrolmentIsFull($enrolableClasses[$gibbonCourseClassID]['enrolmentMax'], $studentCount)) {
+            $classFull = true;
+            continue;
+        }
+
+        if (empty($courseEnrolment)) {
+            $inserted = $courseEnrolmentGateway->insert([
+                'gibbonCourseClassID' => $gibbonCourseClassID,
+                'gibbonPersonID'      => $gibbonPersonID,
+                'role'                => 'Student',
+                'dateEnrolled'        => date('Y-m-d'),
+            ]);
+            $partialFail |= !$inserted;
+        } elseif ($courseEnrolment['role'] == 'Student - Left') {
+            // Re-enrolling a student who previously left this class
+            $updated = $courseEnrolmentGateway->update($courseEnrolment['gibbonCourseClassPersonID'], [
+                'role'           => 'Student',
+                'dateEnrolled'   => date('Y-m-d'),
+                'dateUnenrolled' => null,
+            ]);
+            $partialFail |= !$updated;
+        } else {
+            // Any other role (Teacher, Assistant, etc.) is left untouched
+            $partialFail = true;
+        }
+    }
+} finally {
+    if ($useDatabaseLocking) {
+        $connection2->query('UNLOCK TABLES');
+    }
+}
+
+if ($classFull) {
+    $URL .= '&return=warning1';
+} elseif ($partialFail) {
+    $URL .= '&return=error2';
+} else {
+    $URL .= '&return=success0';
+}
+
+header("Location: {$URL}");

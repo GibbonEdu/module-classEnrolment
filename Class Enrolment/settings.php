@@ -30,6 +30,8 @@ if (isActionAccessible($guid, $connection2, '/modules/Class Enrolment/settings.p
     //Proceed!
     $page->breadcrumbs->add(__('Manage Settings'));
 
+    $page->return->addReturns(['error3' => __m('The close date and time must be after the open date and time.')]);
+
     $settingGateway = $container->get(SettingGateway::class);
 
     // FORM
@@ -42,17 +44,22 @@ if (isActionAccessible($guid, $connection2, '/modules/Class Enrolment/settings.p
     $row = $form->addRow();
         $row->addLabel($setting['name'], __m($setting['nameDisplay']))->description(__m($setting['description']));
         $col = $row->addColumn('openParentEnrolment')->setClass('inline');
-        $col->addDate('openParentEnrolmentDate')->setValue(Format::date(substr($setting['value'], 0, 11)))->addClass('mr-2');
+        $col->addDate('openParentEnrolmentDate')->setValue(Format::date(substr($setting['value'], 0, 10)))->addClass('mr-2');
         $col->addTime('openParentEnrolmentTime')->setValue(substr($setting['value'], 11, 5));
 
     $setting = $settingGateway->getSettingByScope('Class Enrolment', 'closeParentEnrolment', true);
     $row = $form->addRow();
         $row->addLabel($setting['name'], __m($setting['nameDisplay']))->description(__m($setting['description']));
         $col = $row->addColumn('closeParentEnrolment')->setClass('inline');
-        $col->addDate('closeParentEnrolmentDate')->setValue(Format::date(substr($setting['value'], 0, 11)))->addClass('mr-2');
+        $col->addDate('closeParentEnrolmentDate')->setValue(Format::date(substr($setting['value'], 0, 10)))->addClass('mr-2');
         $col->addTime('closeParentEnrolmentTime')->setValue(substr($setting['value'], 11, 5));
 
     $setting = $settingGateway->getSettingByScope('Class Enrolment', 'useDatabaseLocking', true);
+    $row = $form->addRow();
+        $row->addLabel($setting['name'], __m($setting['nameDisplay']))->description(__m($setting['description']));
+        $row->addYesNo($setting['name'])->selected($setting['value'])->required();
+
+    $setting = $settingGateway->getSettingByScope('Class Enrolment', 'allowParentUnenrolment', true);
     $row = $form->addRow();
         $row->addLabel($setting['name'], __m($setting['nameDisplay']))->description(__m($setting['description']));
         $row->addYesNo($setting['name'])->selected($setting['value'])->required();

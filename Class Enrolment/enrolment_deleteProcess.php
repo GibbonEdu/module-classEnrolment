@@ -12,67 +12,39 @@ the Free Software Foundation, either version 3 of the License, or
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with this program. If not, see <http://www.gnu.org/licenses/>.
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-use Gibbon\Domain\User\FamilyGateway;
-use Gibbon\Domain\Students\StudentGateway;
 use Gibbon\Domain\Timetable\CourseEnrolmentGateway;
 
 include '../../gibbon.php';
+require_once __DIR__.'/moduleFunctions.php';
 
 $gibbonCourseClassID = $_GET['gibbonCourseClassID'] ?? '';
 $gibbonPersonID = $_GET['gibbonPersonID'] ?? '';
 
-if ($gibbonPersonID == '' or $gibbonCourseClassID == '') {
-    echo 'Fatal error loading this page!';
-} else {
-    $URL = $session->get('absoluteURL').'/index.php?q=/modules/'.getModuleName($_POST['address'])."/enrolment_delete.php&gibbonPersonID=$gibbonPersonID&gibbonCourseClassID=$gibbonCourseClassID";
-    $URLDelete = $session->get('absoluteURL').'/index.php?q=/modules/'.getModuleName($_POST['address'])."/enrolment.php&gibbonPersonID=$gibbonPersonID&gibbonCourseClassID=$gibbonCourseClassID";
+// On failure go back to the enrolment page for this student; that page shows the reason
+$URL = $session->get('absoluteURL').'/index.php?q=/modules/Class Enrolment/enrolment.php&gibbonPersonID='.urlencode($gibbonPersonID);
 
-    if (isActionAccessible($guid, $connection2, '/modules/Class Enrolment/enrolment_delete.php') == false) {
-        $URL .= '&return=error0';
-        header("Location: {$URL}");
-    } else {
-        // Prepare array of family members
-        $familyGateway = $container->get(FamilyGateway::class);
-        $families = [];
-        $familyMembers = [] ;
-        $people = [];
-        foreach ($familyGateway->selectFamiliesByAdult($session->get('gibbonPersonID'))->fetchAll() as $family) {
-            $families[] = $family["gibbonFamilyID"];
-        }
-        $familyMembers = $familyGateway->selectAdultsByFamily($families)->fetchAll();
-        $familyMembers = array_merge($familyMembers, $familyGateway->selectChildrenByFamily($families)->fetchAll());
-        foreach ($familyMembers as $member) {
-            $people[] = $member['gibbonPersonID'];
-        }
-
-        if (!in_array($gibbonPersonID, $people)) {
-            $URL .= '&return=error0';
-            header("Location: {$URLDelete}");
-        } else {
-            $courseEnrolmentGateway = $container->get(CourseEnrolmentGateway::class);
-            $courseEnrolment = $courseEnrolmentGateway->selectBy(['gibbonCourseClassID' => $gibbonCourseClassID, 'gibbonPersonID' => $gibbonPersonID])->fetch();
-
-            if (empty($courseEnrolment['gibbonCourseClassPersonID'])) {
-                $URL .= '&return=error2';
-                header("Location: {$URL}");
-            } else {
-                $updated = $courseEnrolmentGateway->update($courseEnrolment['gibbonCourseClassPersonID'], ['role' => 'Student - Left', 'dateUnenrolled' => date('Y-m-d')]);
-
-                if (!$updated) {
-                    $URL .= "&return=error2";
-                    header("Location: {$URL}");
-                } else {
-                    $URLDelete .= '&return=success0';
-                    header("Location: {$URLDelete}");
-                }
-            }
-        }
-    }
+if (isActionAccessible($guid, $connection2, '/modules/Class Enrolment/enrolment_delete.php') == false) {
+    header("Location: {$URL}&return=error0");
+    exit;
 }
+
+$check = classEnrolmentCheckUnenrolment($container, $session, $gibbonPersonID, $gibbonCourseClassID);
+if (!empty($check['error'])) {
+    header("Location: {$URL}&return={$check['error']}");
+    exit;
+}
+
+$courseEnrolmentGateway = $container->get(CourseEnrolmentGateway::class);
+$updated = $courseEnrolmentGateway->update($check['enrolment']['gibbonCourseClassPersonID'], [
+    'role'           => 'Student - Left',
+    'dateUnenrolled' => date('Y-m-d'),
+]);
+
+header("Location: {$URL}&return=".($updated ? 'success0' : 'error2'));

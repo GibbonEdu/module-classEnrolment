@@ -25,7 +25,7 @@ $description = "A simple module for allowing parents to enrol their children in 
 $entryURL = "enrolment.php";
 $type = "Additional";
 $category = "Learn";
-$version = "1.3.01";
+$version = "1.4.00";
 $author = "Gibbon Foundation";
 $url = "https://gibbonedu.org";
 
@@ -33,6 +33,7 @@ $url = "https://gibbonedu.org";
 $gibbonSetting[] = "INSERT INTO `gibbonSetting` (`gibbonSettingID` ,`scope` ,`name` ,`nameDisplay` ,`description` ,`value`) VALUES (NULL , 'Class Enrolment', 'openParentEnrolment', 'Open Parent Enrolment', 'When should parents sign ups open?', '');";
 $gibbonSetting[] = "INSERT INTO `gibbonSetting` (`gibbonSettingID` ,`scope` ,`name` ,`nameDisplay` ,`description` ,`value`) VALUES (NULL , 'Class Enrolment', 'closeParentEnrolment', 'Close Parent Enrolment', 'When should parents sign ups close?', '');";
 $gibbonSetting[] = "INSERT INTO `gibbonSetting` (`gibbonSettingID` ,`scope` ,`name` ,`nameDisplay` ,`description` ,`value`) VALUES (NULL , 'Class Enrolment', 'useDatabaseLocking', 'Use Database Locking', 'Ensures fidelity of minimum and maximum enrolment, but comes with a performance cost.', 'Y');";
+$gibbonSetting[] = "INSERT INTO `gibbonSetting` (`gibbonSettingID` ,`scope` ,`name` ,`nameDisplay` ,`description` ,`value`) VALUES (NULL , 'Class Enrolment', 'allowParentUnenrolment', 'Allow Parent Unenrolment', 'Can parents remove student enrolments while the window is open?', 'Y');";
 
 // Action rows
 $actionRows[] = [
